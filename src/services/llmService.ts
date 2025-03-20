@@ -1,3 +1,4 @@
+
 import { getUserLocation, getWeatherData, getCurrentDateTime } from "@/utils/assistantUtils";
 
 export interface Message {
@@ -142,6 +143,12 @@ async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
     
     console.log('Calling Groq API with messages:', messages);
     
+    // Strip out any non-standard fields from messages before sending to Groq API
+    const apiMessages = messages.map(({ role, content }) => ({
+      role,
+      content
+    }));
+    
     // Make actual API call to Groq
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -151,7 +158,7 @@ async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
       },
       body: JSON.stringify({
         model: 'mistral-7b-instruct',
-        messages: messages,
+        messages: apiMessages,
         temperature: 0.7,
         max_tokens: 1000
       })
