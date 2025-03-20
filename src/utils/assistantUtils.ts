@@ -30,7 +30,7 @@ export async function getUserLocation() {
 export async function getWeatherData(city: string) {
   try {
     // Note: In production, use environment variables for API keys
-    const apiKey = '3d824ce97b9201deaf062626bad59411'; // Replace with a real API key
+    const apiKey = '3d824ce97b9201deaf062626bad59411'; 
     
     const response = await fetch(
       `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`

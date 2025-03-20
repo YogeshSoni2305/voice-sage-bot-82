@@ -1,4 +1,3 @@
-
 import { getUserLocation, getWeatherData, getCurrentDateTime } from "@/utils/assistantUtils";
 
 export interface Message {
@@ -128,7 +127,7 @@ async function handleLocalResponse(userMessage: string): Promise<LLMResponse> {
 async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
   try {
     // Replace with your actual Groq API key
-    const GROQ_API_KEY = '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'; // Replace with a real API key or use environment variables
+    const GROQ_API_KEY = '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';
     
     // Add system message if not already present
     if (!messages.some(msg => msg.role === 'system')) {
@@ -143,12 +142,7 @@ async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
     
     console.log('Calling Groq API with messages:', messages);
     
-    // For demo purposes, simulate a response while waiting for API implementation
-    // In a real implementation, this would be replaced with an actual API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Sample response for demonstration - Replace with actual API call in production
-    /*
+    // Make actual API call to Groq
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -164,22 +158,15 @@ async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorData = await response.text();
+      console.error('Groq API error response:', errorData);
+      throw new Error(`HTTP error! status: ${response.status}, ${errorData}`);
     }
 
     const data = await response.json();
+    console.log('Groq API response:', data);
     return { response: data.choices[0].message.content };
-    */
     
-    // Simulated response for demonstration
-    const userContent = messages.filter(msg => msg.role === 'user').pop()?.content.toLowerCase() || '';
-    
-    // Generate a response based on the user message
-    let simulatedResponse = "I understand you're asking about " + userContent.split(' ').slice(0, 3).join(' ') + "... " +
-      "This is a simulated response while we wait for the Groq API integration. " +
-      "In a complete implementation, I would provide a more helpful and contextually relevant answer using the Mistral model.";
-    
-    return { response: simulatedResponse };
   } catch (error) {
     console.error('Error calling Groq API:', error);
     return {
