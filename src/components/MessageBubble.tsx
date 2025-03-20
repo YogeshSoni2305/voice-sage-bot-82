@@ -8,6 +8,7 @@ interface MessageBubbleProps {
   text: string;
   isLoading?: boolean;
   className?: string;
+  icon?: React.ReactNode;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -15,6 +16,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   text,
   isLoading = false,
   className,
+  icon,
 }) => {
   return (
     <div 
@@ -33,7 +35,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         {isUser ? (
           <User className="w-5 h-5 text-white" />
         ) : (
-          <Bot className="w-5 h-5 text-assistant" />
+          icon || <Bot className="w-5 h-5 text-assistant" />
         )}
       </div>
       
