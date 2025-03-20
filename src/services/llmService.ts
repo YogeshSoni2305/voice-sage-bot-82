@@ -1,79 +1,19 @@
 
-interface LLMResponse {
-  response: string;
-  error?: string;
-}
+import { getUserLocation, getWeatherData, getCurrentDateTime } from "@/utils/assistantUtils";
 
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-// Function to get current date and time formatted nicely
-function getCurrentDateTime() {
-  const now = new Date();
-  
-  const timeString = now.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-  
-  const dateString = now.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-  
-  return { timeString, dateString };
+interface LLMResponse {
+  response: string;
+  error?: string;
 }
 
-// Function to get weather data
-async function getWeatherData() {
-  try {
-    // First, get user's location based on IP
-    const locationResponse = await fetch('https://ipapi.co/json/');
-    const locationData = await locationResponse.json();
-    
-    // Then get weather for that location
-    const weatherResponse = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?q=${locationData.city}&units=metric&appid=YOUR_OPENWEATHERMAP_API_KEY`
-    );
-    
-    // If using this in production, replace YOUR_OPENWEATHERMAP_API_KEY with an actual API key
-    // or set up a proxy server to hide the API key
-    
-    if (!weatherResponse.ok) {
-      throw new Error('Weather API error');
-    }
-    
-    const weatherData = await weatherResponse.json();
-    
-    return {
-      city: locationData.city,
-      country: locationData.country_name,
-      temperature: Math.round(weatherData.main.temp),
-      condition: weatherData.weather[0].description,
-      success: true
-    };
-  } catch (error) {
-    console.error('Error fetching weather:', error);
-    return { 
-      success: false, 
-      errorMessage: 'I couldn\'t retrieve the weather information at the moment.'
-    };
-  }
-}
-
+// Function to generate responses using the Groq API
 export async function generateLLMResponse(messages: Message[]): Promise<LLMResponse> {
   try {
-    // In a real implementation, you would call the Groq API here
-    // For demo purposes, we'll simulate a response
-    
-    // Simulate API request delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
     // Get the last user message
     const lastUserMessage = messages.filter(msg => msg.role === 'user').pop();
     
@@ -84,86 +24,16 @@ export async function generateLLMResponse(messages: Message[]): Promise<LLMRespo
       };
     }
 
-    // Simple response generation based on keywords in the user's message
     const userMessage = lastUserMessage.content.toLowerCase();
     
-    // Handle time requests
-    if (userMessage.includes('time')) {
-      const { timeString } = getCurrentDateTime();
-      return { response: `The current time is ${timeString}.` };
-    } 
-    // Handle date requests
-    else if (userMessage.includes('date') || userMessage.includes('day')) {
-      const { dateString } = getCurrentDateTime();
-      return { response: `Today is ${dateString}.` };
-    } 
-    // Handle weather requests
-    else if (userMessage.includes('weather')) {
-      try {
-        const weatherData = await getWeatherData();
-        
-        if (weatherData.success) {
-          return { 
-            response: `The current weather in ${weatherData.city}, ${weatherData.country} is ${weatherData.temperature}°C with ${weatherData.condition}.` 
-          };
-        } else {
-          return { response: weatherData.errorMessage };
-        }
-      } catch (error) {
-        return { 
-          response: "I'm having trouble getting the weather information at the moment. Please try again later." 
-        };
-      }
-    }
-    // Handle combined date, time, and weather requests
-    else if (userMessage.includes('date and time') || 
-             userMessage.includes('time and date') || 
-             (userMessage.includes('time') && userMessage.includes('weather')) ||
-             (userMessage.includes('date') && userMessage.includes('weather')) ||
-             userMessage.includes('everything')) {
-      
-      const { timeString, dateString } = getCurrentDateTime();
-      
-      try {
-        const weatherData = await getWeatherData();
-        
-        if (weatherData.success) {
-          return { 
-            response: `The current time is ${timeString}. Today is ${dateString}. The weather in ${weatherData.city} is ${weatherData.temperature}°C with ${weatherData.condition}.` 
-          };
-        } else {
-          return { 
-            response: `The current time is ${timeString}. Today is ${dateString}. ${weatherData.errorMessage}` 
-          };
-        }
-      } catch (error) {
-        return { 
-          response: `The current time is ${timeString}. Today is ${dateString}. I'm having trouble getting the weather information at the moment.` 
-        };
-      }
+    // Handle specific requests for time, date, weather first
+    // This provides faster responses for these common requests without using the API
+    if (shouldHandleLocally(userMessage)) {
+      return await handleLocalResponse(userMessage);
     }
     
-    // Handle other standard responses
-    if (userMessage.includes('hello') || userMessage.includes('hi')) {
-      return { response: "Hello! How can I assist you today?" };
-    } else if (userMessage.includes('how are you')) {
-      return { response: "I'm functioning well, thank you for asking! How can I help you?" };
-    } else if (userMessage.includes('thank')) {
-      return { response: "You're welcome! Is there anything else I can help you with?" };
-    } else if (userMessage.includes('bye') || userMessage.includes('goodbye')) {
-      return { response: "Goodbye! Feel free to return if you have more questions." };
-    } else if (userMessage.includes('help')) {
-      return { response: "I can answer questions, provide information, or just chat. I can also tell you the current time, date, and weather information. What would you like to know?" };
-    } else if (userMessage.includes('name')) {
-      return { response: "I'm an AI assistant created to help you with various tasks and questions." };
-    } else {
-      // In a real implementation, this would be the actual LLM response
-      return { 
-        response: "I understand you're asking about " + userMessage.split(' ').slice(0, 3).join(' ') + "... " +
-                 "This is a placeholder response since we're not connected to the actual Groq API yet. " +
-                 "In a complete implementation, I would provide a more helpful and contextually relevant answer."
-      };
-    }
+    // For all other queries, use the Groq API
+    return await callGroqAPI(messages);
   } catch (error) {
     console.error('Error generating LLM response:', error);
     return {
@@ -173,15 +43,117 @@ export async function generateLLMResponse(messages: Message[]): Promise<LLMRespo
   }
 }
 
-// To implement the actual Groq API call, you would replace the function above with:
-/*
-export async function generateLLMResponse(messages: Message[]): Promise<LLMResponse> {
+// Helper function to determine if we should handle the request locally
+function shouldHandleLocally(userMessage: string): boolean {
+  // Check if the message is explicitly asking for time, date, weather, or combinations
+  return userMessage.includes('time') || 
+         userMessage.includes('date') || 
+         userMessage.includes('day') ||
+         userMessage.includes('weather') ||
+         userMessage.includes('temperature');
+}
+
+// Function to handle local responses for time, date, and weather queries
+async function handleLocalResponse(userMessage: string): Promise<LLMResponse> {
   try {
+    const { time, date } = getCurrentDateTime();
+    
+    // Handle time requests
+    if (userMessage.includes('time') && !userMessage.includes('date') && !userMessage.includes('weather')) {
+      return { response: `The current time is ${time}.` };
+    } 
+    // Handle date requests
+    else if ((userMessage.includes('date') || userMessage.includes('day')) && 
+              !userMessage.includes('time') && !userMessage.includes('weather')) {
+      return { response: `Today is ${date}.` };
+    } 
+    // Handle weather requests
+    else if (userMessage.includes('weather') && !userMessage.includes('time') && !userMessage.includes('date')) {
+      const locationData = await getUserLocation();
+      
+      if (!locationData.success) {
+        return { response: "I'm having trouble determining your location. Could you specify a city for the weather?" };
+      }
+      
+      const weatherData = await getWeatherData(locationData.city);
+      
+      if (weatherData.success) {
+        return { 
+          response: `The current weather in ${weatherData.city} is ${weatherData.temperature}°C with ${weatherData.condition}. The humidity is ${weatherData.humidity}% and wind speed is ${weatherData.windSpeed} m/s.` 
+        };
+      } else {
+        return { response: "I'm sorry, I couldn't retrieve the weather information right now." };
+      }
+    } 
+    // Handle combined requests (time+date+weather)
+    else if ((userMessage.includes('time') && userMessage.includes('date')) ||
+             (userMessage.includes('time') && userMessage.includes('weather')) ||
+             (userMessage.includes('date') && userMessage.includes('weather')) ||
+             userMessage.includes('everything')) {
+      
+      let responseText = `The current time is ${time}. Today is ${date}.`;
+      
+      // Add weather if requested
+      if (userMessage.includes('weather') || userMessage.includes('everything')) {
+        const locationData = await getUserLocation();
+        
+        if (locationData.success) {
+          const weatherData = await getWeatherData(locationData.city);
+          
+          if (weatherData.success) {
+            responseText += ` The weather in ${weatherData.city} is ${weatherData.temperature}°C with ${weatherData.condition}.`;
+          } else {
+            responseText += " I couldn't retrieve the weather information right now.";
+          }
+        } else {
+          responseText += " I'm having trouble determining your location for weather information.";
+        }
+      }
+      
+      return { response: responseText };
+    }
+    
+    // If we got here, let the API handle it
+    return callGroqAPI([{ role: 'user', content: userMessage }]);
+  } catch (error) {
+    console.error('Error handling local response:', error);
+    return {
+      response: "I'm sorry, I encountered an error while processing your request.",
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}
+
+// Function to call the Groq API
+async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
+  try {
+    // Replace with your actual Groq API key
+    const GROQ_API_KEY = 'YOUR_GROQ_API_KEY'; // Replace with a real API key or use environment variables
+    
+    // Add system message if not already present
+    if (!messages.some(msg => msg.role === 'system')) {
+      messages = [
+        { 
+          role: 'system', 
+          content: 'You are a helpful, concise, and friendly assistant. Always provide brief, accurate answers.' 
+        },
+        ...messages
+      ];
+    }
+    
+    console.log('Calling Groq API with messages:', messages);
+    
+    // For demo purposes, simulate a response while waiting for API implementation
+    // In a real implementation, this would be replaced with an actual API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Sample response for demonstration - Replace with actual API call in production
+    /*
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${YOUR_GROQ_API_KEY}`
+        'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
         model: 'mistral-7b-instruct',
@@ -197,12 +169,22 @@ export async function generateLLMResponse(messages: Message[]): Promise<LLMRespo
 
     const data = await response.json();
     return { response: data.choices[0].message.content };
+    */
+    
+    // Simulated response for demonstration
+    const userContent = messages.filter(msg => msg.role === 'user').pop()?.content.toLowerCase() || '';
+    
+    // Generate a response based on the user message
+    let simulatedResponse = "I understand you're asking about " + userContent.split(' ').slice(0, 3).join(' ') + "... " +
+      "This is a simulated response while we wait for the Groq API integration. " +
+      "In a complete implementation, I would provide a more helpful and contextually relevant answer using the Mistral model.";
+    
+    return { response: simulatedResponse };
   } catch (error) {
-    console.error('Error generating LLM response:', error);
+    console.error('Error calling Groq API:', error);
     return {
-      response: "I'm sorry, I encountered an error while processing your request. Please try again later.",
+      response: "I apologize, but I'm having trouble connecting to my knowledge base right now. Please try again later.",
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
 }
-*/
