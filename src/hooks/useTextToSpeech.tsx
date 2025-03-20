@@ -21,6 +21,7 @@ const useTextToSpeech = ({
 }: UseTextToSpeechProps = {}): UseTextToSpeechReturn => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [femaleVoice, setFemaleVoice] = useState<SpeechSynthesisVoice | null>(null);
   const speechSynthRef = useRef<SpeechSynthesis | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
@@ -33,31 +34,72 @@ const useTextToSpeech = ({
 
     speechSynthRef.current = window.speechSynthesis;
 
+    // Find and set female voice
+    const findFemaleVoice = () => {
+      // Get all available voices
+      const voices = speechSynthRef.current?.getVoices() || [];
+      
+      if (voices.length === 0) {
+        // If voices aren't loaded yet, try again later
+        return null;
+      }
+      
+      // Try to find a female voice
+      // First, look for voices with 'female' in the name
+      let selectedVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('woman') ||
+        voice.name.toLowerCase().includes('girl')
+      );
+      
+      // If no explicit female voice, try common female assistant names
+      if (!selectedVoice) {
+        selectedVoice = voices.find(voice => 
+          voice.name.toLowerCase().includes('samantha') || 
+          voice.name.toLowerCase().includes('siri') ||
+          voice.name.toLowerCase().includes('alexa') ||
+          voice.name.toLowerCase().includes('cortana')
+        );
+      }
+      
+      // If still no match, try to find a voice with a high pitch
+      // Or just use the first English female voice
+      if (!selectedVoice) {
+        // Look for English voices
+        const englishVoices = voices.filter(voice => 
+          voice.lang.includes('en-') || voice.lang.includes('en_')
+        );
+        
+        // Get the first non-male voice or just the first one
+        selectedVoice = englishVoices.find(voice => 
+          !voice.name.toLowerCase().includes('male') && 
+          !voice.name.toLowerCase().includes('man')
+        ) || englishVoices[0];
+      }
+      
+      return selectedVoice || voices[0];
+    };
+    
+    // Get voices initially (sometimes voices don't load immediately)
+    const initialVoice = findFemaleVoice();
+    if (initialVoice) {
+      setFemaleVoice(initialVoice);
+    }
+    
+    // Set up a listener for when voices are loaded
+    speechSynthRef.current.onvoiceschanged = () => {
+      const selectedVoice = findFemaleVoice();
+      if (selectedVoice) {
+        setFemaleVoice(selectedVoice);
+      }
+    };
+
     return () => {
       if (speechSynthRef.current) {
         speechSynthRef.current.cancel();
       }
     };
   }, []);
-
-  // Set up the speech synthesis voice
-  useEffect(() => {
-    if (!speechSynthRef.current) return;
-
-    // A bit of delay to make sure voices are loaded
-    const timeoutId = setTimeout(() => {
-      if (voice && speechSynthRef.current) {
-        const voices = speechSynthRef.current.getVoices();
-        const selectedVoice = voices.find(v => v.name === voice || v.voiceURI === voice);
-        
-        if (selectedVoice && utteranceRef.current) {
-          utteranceRef.current.voice = selectedVoice;
-        }
-      }
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [voice]);
 
   const speak = useCallback((text: string) => {
     if (!speechSynthRef.current) {
@@ -74,8 +116,11 @@ const useTextToSpeech = ({
       utterance.rate = rate;
       utterance.pitch = pitch;
       
-      // Set voice if specified
-      if (voice) {
+      // Set the female voice
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+      } else if (voice) {
+        // Fall back to specified voice if no female voice is found
         const voices = speechSynthRef.current.getVoices();
         const selectedVoice = voices.find(v => v.name === voice || v.voiceURI === voice);
         if (selectedVoice) {
@@ -102,7 +147,7 @@ const useTextToSpeech = ({
       setError(`Error during speech synthesis: ${err}`);
       setIsSpeaking(false);
     }
-  }, [rate, pitch, voice]);
+  }, [rate, pitch, voice, femaleVoice]);
 
   const stop = useCallback(() => {
     if (speechSynthRef.current) {

@@ -8,7 +8,7 @@ import WaveformAnimation from './WaveformAnimation';
 import useSpeechRecognition from '@/hooks/useSpeechRecognition';
 import useTextToSpeech from '@/hooks/useTextToSpeech';
 import { generateLLMResponse, Message } from '@/services/llmService';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Clock, Calendar, CloudSun } from 'lucide-react';
 
 interface VoiceAssistantProps {
   className?: string;
@@ -18,13 +18,14 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
   const [messages, setMessages] = useState<Array<Message & { id: string }>>([
     { 
       role: 'assistant', 
-      content: 'Hello! I\'m your AI assistant. How can I help you today?',
+      content: 'Hello! I\'m your AI assistant. How can I help you today? You can ask me about the time, date, weather, or anything else.',
       id: 'init-' + Date.now()
     }
   ]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoEndListening, setAutoEndListening] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -38,10 +39,28 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
     }
   }, [messages, isTyping]);
 
-  // Process transcript when user stops speaking
+  // Process transcript when user has been silent for a moment
   useEffect(() => {
-    if (!isListening && transcript.trim()) {
+    if (isListening && transcript.trim() && autoEndListening) {
+      // Stop listening after a significant pause in speech
+      stopListening();
+      setAutoEndListening(false);
+      
+      // Process the transcript
       handleSendMessage(transcript);
+    }
+  }, [isListening, transcript, autoEndListening]);
+
+  // Set up auto-end listening when transcript has been stable for a while
+  useEffect(() => {
+    if (isListening && transcript.trim()) {
+      const timer = setTimeout(() => {
+        setAutoEndListening(true);
+      }, 1500); // 1.5 seconds of silence triggers auto-end
+      
+      return () => {
+        clearTimeout(timer);
+      };
     }
   }, [isListening, transcript]);
 
@@ -54,8 +73,12 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
   const toggleListening = () => {
     if (isListening) {
       stopListening();
+      if (transcript.trim()) {
+        handleSendMessage(transcript);
+      }
     } else {
       if (isSpeaking) stopSpeaking();
+      setAutoEndListening(false);
       startListening();
     }
   };
@@ -115,6 +138,21 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
     }
   };
 
+  // Helper function to determine if a message is related to time, date, or weather
+  const getMessageIcon = (content: string) => {
+    const lowerContent = content.toLowerCase();
+    
+    if (lowerContent.includes('time') && !lowerContent.includes('weather') && !lowerContent.includes('date')) {
+      return <Clock className="w-4 h-4 text-blue-500" />;
+    } else if ((lowerContent.includes('date') || lowerContent.includes('day')) && !lowerContent.includes('weather') && !lowerContent.includes('time')) {
+      return <Calendar className="w-4 h-4 text-green-500" />;
+    } else if (lowerContent.includes('weather')) {
+      return <CloudSun className="w-4 h-4 text-yellow-500" />;
+    }
+    
+    return null;
+  };
+
   return (
     <div className={cn('flex flex-col h-full w-full max-w-3xl mx-auto', className)}>
       {/* Header */}
@@ -131,6 +169,7 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
             key={message.id}
             isUser={message.role === 'user'}
             text={message.content}
+            icon={message.role === 'assistant' ? getMessageIcon(message.content) : undefined}
           />
         ))}
         
@@ -178,7 +217,7 @@ const VoiceAssistant: React.FC<VoiceAssistantProps> = ({ className }) => {
           />
           
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {isListening ? 'Tap to stop listening' : 'Tap the microphone to speak'}
+            {isListening ? 'Tap to stop listening or wait for a pause' : 'Tap the microphone to speak'}
           </p>
         </div>
       </div>

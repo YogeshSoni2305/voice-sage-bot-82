@@ -15,6 +15,7 @@ const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recognition, setRecognition] = useState<any | null>(null);
+  const [silenceTimer, setSilenceTimer] = useState<number | null>(null);
 
   useEffect(() => {
     // Check for browser support
@@ -27,27 +28,74 @@ const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognitionInstance = new SpeechRecognition();
     
+    // Improved configuration for better recognition
     recognitionInstance.continuous = true;
     recognitionInstance.interimResults = true;
     recognitionInstance.lang = 'en-US';
+    recognitionInstance.maxAlternatives = 3; // Get multiple alternatives for better accuracy
 
+    // Add silence detection
+    let lastResultTimestamp = Date.now();
+    
     recognitionInstance.onresult = (event: any) => {
+      lastResultTimestamp = Date.now();
+      
+      // Process results for best transcript
       const currentTranscript = Array.from(event.results)
-        .map((result: any) => result[0].transcript)
-        .join('');
+        .map((result: any) => {
+          // Get the most confident result
+          let bestResult = result[0];
+          for (let i = 1; i < result.length; i++) {
+            if (result[i].confidence > bestResult.confidence) {
+              bestResult = result[i];
+            }
+          }
+          return bestResult.transcript;
+        })
+        .join(' ');
       
       setTranscript(currentTranscript);
     };
 
     recognitionInstance.onerror = (event: any) => {
+      // Ignore no-speech errors when user is just being quiet
+      if (event.error === 'no-speech') {
+        return;
+      }
+      
+      // Handle other errors
       setError(`Speech recognition error: ${event.error}`);
       setIsListening(false);
     };
 
     recognitionInstance.onend = () => {
+      // If still listening, restart recognition
       if (isListening) {
-        recognitionInstance.start();
+        try {
+          recognitionInstance.start();
+        } catch (err) {
+          console.error('Error restarting recognition:', err);
+        }
       }
+    };
+
+    recognitionInstance.onsoundstart = () => {
+      // Clear any existing silence timer
+      if (silenceTimer) {
+        window.clearTimeout(silenceTimer);
+        setSilenceTimer(null);
+      }
+    };
+
+    recognitionInstance.onsoundend = () => {
+      // Set a timeout to stop listening if silence persists
+      const timer = window.setTimeout(() => {
+        if (Date.now() - lastResultTimestamp > 2000 && transcript) {
+          stopListening();
+        }
+      }, 2000);
+      
+      setSilenceTimer(timer as unknown as number);
     };
 
     setRecognition(recognitionInstance);
@@ -57,8 +105,12 @@ const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
       if (recognitionInstance) {
         recognitionInstance.stop();
       }
+      
+      if (silenceTimer) {
+        window.clearTimeout(silenceTimer);
+      }
     };
-  }, [isListening]);
+  }, [isListening, silenceTimer, transcript]);
 
   const startListening = useCallback(() => {
     setError(null);
@@ -78,9 +130,18 @@ const useSpeechRecognition = (): UseSpeechRecognitionReturn => {
     setIsListening(false);
     
     if (recognition) {
-      recognition.stop();
+      try {
+        recognition.stop();
+      } catch (err) {
+        console.error('Error stopping recognition:', err);
+      }
     }
-  }, [recognition]);
+    
+    if (silenceTimer) {
+      window.clearTimeout(silenceTimer);
+      setSilenceTimer(null);
+    }
+  }, [recognition, silenceTimer]);
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
