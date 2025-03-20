@@ -128,7 +128,7 @@ async function handleLocalResponse(userMessage: string): Promise<LLMResponse> {
 async function callGroqAPI(messages: Message[]): Promise<LLMResponse> {
   try {
     // Replace with your actual Groq API key
-    const GROQ_API_KEY = 'YOUR_GROQ_API_KEY'; // Replace with a real API key or use environment variables
+    const GROQ_API_KEY = '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'; // Replace with a real API key or use environment variables
     
     // Add system message if not already present
     if (!messages.some(msg => msg.role === 'system')) {
